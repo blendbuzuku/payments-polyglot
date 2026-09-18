@@ -34,6 +34,30 @@ jobs:
           ./settle spec/payments.csv > out.txt
           diff -u spec/expected.txt out.txt
 
+  interop:
+    name: "C# calling C++ (P/Invoke)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build the native library
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -O2 -fPIC -shared \
+              -Icpp/include cpp/src/iban.cpp cpp/src/iban_c.cpp -o libsettle_iban.so
+          nm -D --defined-only libsettle_iban.so | grep settle_iban_is_valid
+      - name: Build the .NET app and put the library beside it
+        run: |
+          dotnet publish csharp/Settle/Settle.csproj -c Release -o publish
+          cp libsettle_iban.so publish/
+      - name: Managed and native paths must produce the same report
+        run: |
+          ./publish/settle spec/payments.csv > managed.txt
+          ./publish/settle spec/payments.csv --native > native.txt
+          diff -u spec/expected.txt managed.txt
+          diff -u spec/expected.txt native.txt
+
   go:
     runs-on: ubuntu-latest
     steps:

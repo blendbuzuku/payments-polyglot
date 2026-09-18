@@ -99,12 +99,48 @@ The C# version needs `StringComparer.Ordinal` explicitly: the default comparer i
 culture-sensitive, which would sort the accounts differently from the other two on some
 machines. That class of bug is exactly what writing the same program three times exposes.
 
+## Interop: C# calling the C++ validator
+
+The IBAN check also builds as a shared library with a flat C ABI, and the .NET app can
+use it instead of its own implementation:
+
+```bash
+# Linux
+g++ -std=c++20 -O2 -fPIC -shared -Icpp/include cpp/src/iban.cpp cpp/src/iban_c.cpp -o libsettle_iban.so
+dotnet publish csharp/Settle/Settle.csproj -c Release -o publish && cp libsettle_iban.so publish/
+./publish/settle spec/payments.csv --native
+
+# Windows (Developer PowerShell)
+cl /LD /std:c++20 /EHsc /W4 /DSETTLE_IBAN_EXPORTS /Iinclude cpp\src\iban.cpp cpp\src\iban_c.cpp /Fe:settle_iban.dll
+```
+
+`--native` routes every IBAN through `settle_iban_is_valid` in the C++ library; without it
+the managed implementation answers. Both must print the same report, and CI asserts exactly
+that on every push.
+
+Four things decide whether a boundary like this works, and all four are visible in
+[`iban_c.h`](cpp/include/iban_c.h) and [`NativeIbanValidator.cs`](csharp/Settle/Interop/NativeIbanValidator.cs):
+
+| Concern | Choice here | What goes wrong otherwise |
+| --- | --- | --- |
+| Symbol name | `extern "C"` | The export is mangled (`?isValidIban@settle@@…`) and .NET throws `EntryPointNotFoundException` |
+| Types | `int`, not `bool` | C++ `bool` has no guaranteed size across compilers |
+| Strings | `LPUTF8Str` marshalling onto `const char*` | .NET's default is UTF-16, which a `char*` is not |
+| Memory | nothing is allocated across the boundary | Freeing with the wrong allocator corrupts the heap |
+
+Bitness matters too: a 64-bit process cannot load a 32-bit library, which is what
+`BadImageFormatException` means when it appears.
+
+The Go implementation deliberately does not do this. Calling C from Go means cgo, which
+costs cross-compilation and build simplicity, and here it would buy nothing — the point of
+this repository is to compare how each language solves the problem natively.
+
 ## Layout
 
 ```
 spec/          the shared fixture and the golden output all three must produce
-csharp/Settle  .NET 8 console app
-cpp/           C++20, headers in include/, sources in src/
+csharp/Settle  .NET 8 console app, with the P/Invoke path under Interop/
+cpp/           C++20, headers in include/, sources in src/, plus the exported C ABI
 go/            Go module, with unit tests and a golden-file test
 ```
 

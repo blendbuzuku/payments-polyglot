@@ -16,12 +16,20 @@ public sealed class BatchProcessor
     private readonly Dictionary<string, RailTotals> _totals;
     private readonly HashSet<string> _seenIds = [];
     private readonly Ledger _ledger = new();
+    private readonly IIbanValidator _ibans;
 
     private int _accepted;
     private int _rejected;
 
-    public BatchProcessor() =>
+    /// <param name="ibans">
+    /// Managed validation by default; pass <see cref="Interop.NativeIbanValidator"/>
+    /// to have the C++ library answer instead. The report must be identical either way.
+    /// </param>
+    public BatchProcessor(IIbanValidator? ibans = null)
+    {
+        _ibans = ibans ?? new ManagedIbanValidator();
         _totals = _rails.ToDictionary(rail => rail.Name, _ => new RailTotals());
+    }
 
     public void Run(TextReader input, TextWriter output)
     {
@@ -100,7 +108,7 @@ public sealed class BatchProcessor
     private string? Check(Payment payment)
     {
         if (!_seenIds.Add(payment.Id)) return "DUPLICATE_ID";
-        if (!Iban.IsValid(payment.Debtor) || !Iban.IsValid(payment.Creditor)) return "INVALID_IBAN";
+        if (!_ibans.IsValid(payment.Debtor) || !_ibans.IsValid(payment.Creditor)) return "INVALID_IBAN";
         if (payment.Debtor == payment.Creditor) return "SAME_ACCOUNT";
         if (payment.Amount <= 0) return "INVALID_AMOUNT";
         if (payment.Currency != SupportedCurrency) return "UNSUPPORTED_CURRENCY";
