@@ -1,0 +1,19 @@
+# C#
+bin/
+obj/
+
+# C++
+build/
+*.exe
+*.obj
+*.pdb
+*.ilk
+
+# Editors
+.vs/
+.vscode/
+.idea/
+
+# Output (root only: csharp/Settle must not be caught by this)
+/out.txt
+/settle

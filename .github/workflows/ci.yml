@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  csharp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        run: dotnet build csharp/Settle/Settle.csproj -warnaserror
+      - name: Run and compare with the golden output
+        run: |
+          dotnet run --project csharp/Settle/Settle.csproj -- spec/payments.csv > out.txt
+          diff -u spec/expected.txt out.txt
+
+  cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          g++ --version
+          g++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -O2 \
+              -Icpp/include cpp/src/*.cpp -o settle
+      - name: Run and compare with the golden output
+        run: |
+          ./settle spec/payments.csv > out.txt
+          diff -u spec/expected.txt out.txt
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Check formatting
+        run: test -z "$(gofmt -l go/)"
+      - name: Vet
+        run: cd go && go vet ./...
+      - name: Test
+        run: cd go && go test ./...
+      - name: Run and compare with the golden output
+        run: |
+          cd go && go build -o ../settle . && cd ..
+          ./settle spec/payments.csv > out.txt
+          diff -u spec/expected.txt out.txt
