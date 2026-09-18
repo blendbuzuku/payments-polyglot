@@ -71,9 +71,11 @@ arithmetic (`150 + (amount + 5000) / 10000`), never through a float.
 # C# (.NET 8)
 cd csharp/Settle && dotnet run -- ../../spec/payments.csv
 
-# C++20 (CMake, or a single cl/g++ command)
+# C++20 on Windows: finds Visual Studio itself, no Developer prompt needed
+cpp\build.bat && cpp\build\settle.exe spec\payments.csv
+
+# C++20 anywhere else
 cd cpp && cmake -B build && cmake --build build && ./build/settle ../spec/payments.csv
-cl /std:c++20 /EHsc /W4 /permissive- /Iinclude src/*.cpp /Fe:settle.exe   # MSVC
 g++ -std=c++20 -Wall -Wextra -Iinclude src/*.cpp -o settle                # GCC
 
 # Go
