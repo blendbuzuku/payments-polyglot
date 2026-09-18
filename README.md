@@ -67,6 +67,36 @@ arithmetic (`150 + (amount + 5000) / 10000`), never through a float.
 
 ## Running it
 
+On Windows, `run.bat` asks which language to use and handles the build for you:
+
+```
+> run.bat
+
+  settle  -  one payment batch processor, three languages
+  input:  C:\...\payments-polyglot\spec\payments.csv
+
+    [1]  C#     .NET 8
+    [2]  C++    C++20, MSVC
+    [3]  Go
+    [4]  All three, compared against spec\expected.txt
+    [5]  C# calling the C++ library through P/Invoke
+    [Q]  Quit
+
+Which one?
+```
+
+Option 4 is the interesting one: it runs all three and diffs each report against the golden
+file, which is what CI does on every push.
+
+```
+  C# : matches spec\expected.txt
+  C++ : matches spec\expected.txt
+  Go : matches spec\expected.txt
+```
+
+It also takes arguments, so `run.bat 4` skips the menu and `run.bat 4 my-batch.csv` runs your
+own file. Or drive each toolchain directly:
+
 ```bash
 # C# (.NET 8)
 cd csharp/Settle && dotnet run -- ../../spec/payments.csv
