@@ -6,7 +6,7 @@ rem  Usage:  run.bat            menu
 rem          run.bat 3          straight to Go
 rem          run.bat 4 my.csv   compare all three on your own file
 rem ---------------------------------------------------------------------------
-setlocal enabledelayedexpansion
+setlocal
 cd /d "%~dp0"
 
 set "CSV=%~2"
@@ -17,8 +17,16 @@ if not exist "%CSVFULL%" (
     exit /b 1
 )
 
+rem When this is double-clicked in Explorer, the window closes the moment the script
+rem ends. The menu below therefore loops until you choose Q, and Q pauses on the way
+rem out, so the last report stays on screen either way.
+
 set "CHOICE=%~1"
-if not "%CHOICE%"=="" goto dispatch
+if not "%CHOICE%"=="" (
+    set "INTERACTIVE="
+    goto dispatch
+)
+set "INTERACTIVE=1"
 
 :menu
 echo.
@@ -34,7 +42,27 @@ echo     [Q]  Quit
 echo.
 set "CHOICE="
 set /p "CHOICE=Which one? "
-if /i "%CHOICE%"=="Q" exit /b 0
+
+rem Nothing entered: twice in a row means stdin has run out, so stop rather than
+rem redraw the menu forever. Checking "defined" first matters, because expanding a
+rem substring of an undefined variable leaves the literal text behind.
+if not defined CHOICE goto no_input
+set "EMPTY=0"
+goto got_input
+
+:no_input
+rem This lives outside an if-block on purpose: inside one, %EMPTY% would expand to
+rem its value from before the increment, which is the classic batch trap.
+set /a EMPTY+=1
+if %EMPTY% geq 2 goto quit
+goto menu
+
+:got_input
+
+rem Keep only the first character: every choice is one, and this drops a trailing
+rem space or the carriage return that arrives when input is piped in rather than typed.
+set "CHOICE=%CHOICE:~0,1%"
+if /i "%CHOICE%"=="Q" goto quit
 if "%CHOICE%"=="" goto menu
 
 :dispatch
@@ -45,11 +73,22 @@ if "%CHOICE%"=="3" ( call :run_go      "%CSVFULL%" & goto done )
 if "%CHOICE%"=="4" ( call :run_all     "%CSVFULL%" & goto done )
 if "%CHOICE%"=="5" ( call :run_interop "%CSVFULL%" & goto done )
 echo "%CHOICE%" is not one of the options.
-if "%~1"=="" goto menu
+if defined INTERACTIVE goto menu
 exit /b 1
 
 :done
-exit /b %ERRORLEVEL%
+set "LAST=%ERRORLEVEL%"
+if defined INTERACTIVE (
+    echo.
+    echo -------------------------------------------------------------------------
+    goto menu
+)
+exit /b %LAST%
+
+:quit
+echo.
+pause
+exit /b 0
 
 
 rem --------------------------------------------------------------------- C# --
@@ -59,18 +98,21 @@ where dotnet >nul 2>&1 || (
     exit /b 1
 )
 echo --- C# ------------------------------------------------------------------
-dotnet run --project "csharp\Settle" -- "%~1"
+dotnet run --project "csharp\Settle" -- "%~1" <nul
 exit /b %ERRORLEVEL%
 
 
 rem -------------------------------------------------------------------- C++ --
 :run_cpp
 echo --- C++ -----------------------------------------------------------------
-call "cpp\build.bat" >nul || (
+rem In a child process, not with call: vcvars64.bat inside build.bat ends with an
+rem extra endlocal to export its variables, which would otherwise pop this script's
+rem own setlocal. <nul keeps it from consuming the menu's input.
+cmd /c "%~dp0cpp\build.bat" >nul <nul || (
     echo The C++ build failed. Run cpp\build.bat on its own to see why.
     exit /b 1
 )
-"cpp\build\settle.exe" "%~1"
+"cpp\build\settle.exe" "%~1" <nul
 exit /b %ERRORLEVEL%
 
 
@@ -78,7 +120,7 @@ rem --------------------------------------------------------------------- Go --
 :run_go
 call :find_go || exit /b 1
 echo --- Go ------------------------------------------------------------------
-"%GOEXE%" -C "go" run . "%~1"
+"%GOEXE%" -C "go" run . "%~1" <nul
 exit /b %ERRORLEVEL%
 
 
@@ -96,13 +138,13 @@ rem ----------------------------------------------------------------- interop --
 :run_interop
 where dotnet >nul 2>&1 || ( echo The .NET SDK was not found. & exit /b 1 )
 echo --- C# with the native C++ validator ------------------------------------
-call "cpp\build.bat" >nul || (
+cmd /c "%~dp0cpp\build.bat" >nul <nul || (
     echo Could not build the native library. Run cpp\build.bat to see why.
     exit /b 1
 )
-dotnet build "csharp\Settle" -v q --nologo >nul || exit /b 1
+dotnet build "csharp\Settle" -v q --nologo >nul <nul || exit /b 1
 copy /y "cpp\build\settle_iban.dll" "csharp\Settle\bin\Debug\net8.0\" >nul
-"csharp\Settle\bin\Debug\net8.0\settle.exe" "%~1" --native
+"csharp\Settle\bin\Debug\net8.0\settle.exe" "%~1" --native <nul
 exit /b %ERRORLEVEL%
 
 

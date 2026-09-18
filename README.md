@@ -85,6 +85,9 @@ On Windows, `run.bat` asks which language to use and handles the build for you:
 Which one?
 ```
 
+The menu comes back after each run, so you can try one language after another, and `Q` exits.
+That also means the window stays open when the file is double-clicked in Explorer.
+
 Option 4 is the interesting one: it runs all three and diffs each report against the golden
 file, which is what CI does on every push.
 
